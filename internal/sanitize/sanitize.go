@@ -26,15 +26,20 @@ var usageAllowlist = map[string]bool{
 // topLevelAllowlist is the set of top-level response fields OpenAI's own
 // schema defines. Anything else an upstream adds (e.g. a provider trace id,
 // a billing field) is stripped.
+//
+// system_fingerprint is deliberately NOT included even though it's a real
+// OpenAI schema field: in practice providers encode backend/build identity
+// into its value (e.g. "fp_qwen3.8-flash"), which is exactly the kind of
+// leak identity opacity forbids. Dropping the field entirely is cheaper and
+// safer than trying to sanitize its content.
 var topLevelAllowlist = map[string]bool{
-	"id":                  true,
-	"object":              true,
-	"created":             true,
-	"model":               true,
-	"choices":             true,
-	"usage":               true,
-	"system_fingerprint":  true,
-	"service_tier":        true,
+	"id":           true,
+	"object":       true,
+	"created":      true,
+	"model":        true,
+	"choices":      true,
+	"usage":        true,
+	"service_tier": true,
 }
 
 // Object sanitizes one JSON object — a full non-streaming response or a
