@@ -77,18 +77,27 @@ func (h *Handlers) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	maxAttempts := cfg.Server.MaxAttempts
 	tried := map[string]bool{}
-	attempted := 0
+	// gatedEver tracks whether Stage 1 gating ever produced at least one
+	// candidate for this request, independent of whether that candidate was
+	// actually admitted by its circuit breaker. This is distinct from "did
+	// we dispatch anything": a lone candidate can be legitimately denied by
+	// Allow() (e.g. a half-open probe already in flight) without that
+	// meaning no upstream is *capable* of serving the request — so the
+	// "no configured upstream can serve this request" 400 below must key
+	// off gating outcome, not breaker admission.
+	gatedEver := false
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		gin := router.GateInput{Signals: signals, EstimatedTotalTokens: int64(totalEst)}
 		candidates := router.Candidates(pm, h.Registry, gin, tried)
 		if len(candidates) == 0 {
-			if attempted == 0 {
+			if !gatedEver {
 				writeFatal(w, http.StatusBadRequest, "no configured upstream can serve this request (modality, tool, structured-output, or context-window constraints)", openai.ErrTypeInvalidRequest)
 				return
 			}
 			break
 		}
+		gatedEver = true
 
 		selected := router.Select(candidates)
 		allowed, _ := selected.Breaker.Allow()
@@ -98,16 +107,13 @@ func (h *Handlers) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		tried[selected.Cfg.ID] = true
-		attempted++
 		selected.ReserveTPM(int64(totalEst))
 		selected.InFlight.Add(1)
 
 		if signals.Stream {
-			before := selected.TokensSent.Sum()
-			result, committed := serveStream(ctx, w, selected, clientReq, publicModel, reqID, h.Stats, h.Logger)
+			result, committed, delivered := serveStream(ctx, w, selected, clientReq, publicModel, reqID, h.Stats, h.Logger)
 			selected.InFlight.Add(-1)
 			if committed {
-				delivered := selected.TokensSent.Sum() - before
 				router.ApplyDelivery(pm, candidates, selected, delivered)
 				if h.Syncer != nil {
 					h.Syncer.RecordLocalDelivery(publicModel, selected.Cfg.ID, float64(delivered))
@@ -120,12 +126,10 @@ func (h *Handlers) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		before := selected.TokensSent.Sum()
-		result := serveNonStream(ctx, w, selected, clientReq, publicModel, reqID, h.Stats, h.Logger)
+		result, delivered := serveNonStream(ctx, w, selected, clientReq, publicModel, reqID, h.Stats, h.Logger)
 		selected.InFlight.Add(-1)
 		switch result {
 		case stepSuccess:
-			delivered := selected.TokensSent.Sum() - before
 			router.ApplyDelivery(pm, candidates, selected, delivered)
 			if h.Syncer != nil {
 				h.Syncer.RecordLocalDelivery(publicModel, selected.Cfg.ID, float64(delivered))
