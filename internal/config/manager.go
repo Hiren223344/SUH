@@ -36,6 +36,7 @@ func NewManager(path string, logger *slog.Logger) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg.WarnMissingAPIKeys(logger)
 	m := &Manager{path: path, interval: 10 * time.Second, logger: logger}
 	m.cur.Store(cfg)
 	if fi, err := os.Stat(path); err == nil {
@@ -66,6 +67,7 @@ func (m *Manager) Reload() error {
 		m.logger.Error("config reload failed, keeping previous config", "path", m.path, "error", err)
 		return err
 	}
+	cfg.WarnMissingAPIKeys(m.logger)
 	m.cur.Store(cfg)
 	m.logger.Info("config reloaded", "path", m.path)
 

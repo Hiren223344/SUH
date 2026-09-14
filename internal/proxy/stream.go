@@ -151,9 +151,11 @@ func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstre
 	for {
 		payload, err := sse.Next()
 		if err != nil {
-			if payload != "" {
-				writeEvent(payload)
-			}
+			// sseReader.Next never pairs a non-empty payload with a non-nil
+			// error (a trailing unterminated "data:" line is returned whole,
+			// with a nil error, on the call that reads it; the reader only
+			// surfaces EOF/read errors once nothing further remains) — so
+			// there is no pending payload to flush here.
 			if isCleanEOF(err) {
 				break
 			}

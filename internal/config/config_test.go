@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -113,6 +115,76 @@ upstreams:
 `
 	_, err := Parse([]byte(broken))
 	require.Error(t, err)
+}
+
+func TestParse_RejectsInvalidBaseURL(t *testing.T) {
+	broken := `
+public_models:
+  - name: "M"
+    upstreams:
+      - id: up1
+        weight: 1
+        fallback: true
+upstreams:
+  - id: up1
+    base_url: "not-a-url"
+    model: "m"
+    context_window: 1000
+    max_output: 100
+    modalities: [text]
+    tpm_limit: 1000
+`
+	_, err := Parse([]byte(broken))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not a valid absolute URL")
+}
+
+func TestParse_RejectsMaxOutputExceedingContextWindow(t *testing.T) {
+	broken := `
+public_models:
+  - name: "M"
+    upstreams:
+      - id: up1
+        weight: 1
+        fallback: true
+upstreams:
+  - id: up1
+    base_url: "https://example.com/v1"
+    model: "m"
+    context_window: 1000
+    max_output: 2000
+    modalities: [text]
+    tpm_limit: 1000
+`
+	_, err := Parse([]byte(broken))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "max_output")
+}
+
+func TestWarnMissingAPIKeys(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	cfg, err := Parse([]byte(validYAML))
+	require.NoError(t, err)
+	cfg.Upstreams[0].APIKeyEnv = "ROUTER_TEST_UNSET_KEY_XYZ"
+	require.NoError(t, os.Unsetenv("ROUTER_TEST_UNSET_KEY_XYZ"))
+
+	cfg.WarnMissingAPIKeys(logger)
+	require.Contains(t, buf.String(), "resolves to an empty value")
+	require.Contains(t, buf.String(), "up1")
+}
+
+func TestWarnMissingAPIKeys_SilentWhenUnset(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	cfg, err := Parse([]byte(validYAML))
+	require.NoError(t, err)
+	// api_key_env left unset entirely (e.g. a self-hosted upstream) must
+	// never warn -- only a configured-but-empty env var should.
+	cfg.WarnMissingAPIKeys(logger)
+	require.Empty(t, buf.String())
 }
 
 func TestManager_ReloadPicksUpWeightChange(t *testing.T) {

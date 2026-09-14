@@ -85,8 +85,28 @@ func ExtractSignals(req *jsonutil.OrderedMap) (Signals, error) {
 		}
 	}
 
-	if req.Has("tools") || req.Has("tool_choice") {
-		s.HasTools = true
+	if raw, ok := req.Get("tools"); ok {
+		var arr []json.RawMessage
+		if json.Unmarshal(raw, &arr) == nil && len(arr) > 0 {
+			s.HasTools = true
+		}
+	}
+	if raw, ok := req.Get("tool_choice"); ok {
+		// tool_choice is meaningless without a tools array, but a client
+		// can still send tool_choice: "none" alongside one to explicitly
+		// suppress tool use for this request — that must NOT gate out
+		// upstreams with supports_tools: false, since the model is being
+		// told not to call any tool. Any other string ("auto", "required")
+		// or an object (forcing one specific function) means the request
+		// does want tool-calling capability.
+		var choice string
+		if err := json.Unmarshal(raw, &choice); err == nil {
+			if choice != "none" {
+				s.HasTools = true
+			}
+		} else {
+			s.HasTools = true
+		}
 	}
 
 	msgs, err := Messages(req)

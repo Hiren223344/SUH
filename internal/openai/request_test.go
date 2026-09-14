@@ -48,6 +48,34 @@ func TestExtractSignals_ToolsFromToolsField(t *testing.T) {
 	require.True(t, s.HasTools)
 }
 
+func TestExtractSignals_EmptyToolsArrayDoesNotGateTools(t *testing.T) {
+	m := parseReq(t, `{"model":"M","messages":[],"tools":[]}`)
+	s, err := ExtractSignals(m)
+	require.NoError(t, err)
+	require.False(t, s.HasTools, "an empty tools array must not require tool-capable upstreams")
+}
+
+func TestExtractSignals_ToolChoiceNoneWithoutToolsDoesNotGateTools(t *testing.T) {
+	m := parseReq(t, `{"model":"M","messages":[],"tool_choice":"none"}`)
+	s, err := ExtractSignals(m)
+	require.NoError(t, err)
+	require.False(t, s.HasTools, "tool_choice: none must not require tool-capable upstreams")
+}
+
+func TestExtractSignals_ToolChoiceAutoRequiresTools(t *testing.T) {
+	m := parseReq(t, `{"model":"M","messages":[],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"auto"}`)
+	s, err := ExtractSignals(m)
+	require.NoError(t, err)
+	require.True(t, s.HasTools)
+}
+
+func TestExtractSignals_ToolChoiceForcedFunctionRequiresTools(t *testing.T) {
+	m := parseReq(t, `{"model":"M","messages":[],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":{"type":"function","function":{"name":"f"}}}`)
+	s, err := ExtractSignals(m)
+	require.NoError(t, err)
+	require.True(t, s.HasTools)
+}
+
 func TestExtractSignals_ToolsFromHistory(t *testing.T) {
 	m := parseReq(t, `{"model":"M","messages":[{"role":"tool","content":"result"}]}`)
 	s, err := ExtractSignals(m)

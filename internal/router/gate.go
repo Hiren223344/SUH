@@ -33,27 +33,6 @@ func Candidates(pm *config.PublicModel, reg *Registry, in GateInput, exclude map
 	return out
 }
 
-// FallbackCandidates returns only the upstreams marked as the universal
-// fallback pool for pm, still subject to Stage 1 gating. Used when the
-// primary candidate set is empty.
-func FallbackCandidates(pm *config.PublicModel, reg *Registry, in GateInput, exclude map[string]bool) []*upstream.Upstream {
-	var out []*upstream.Upstream
-	for _, ref := range pm.Upstreams {
-		if !ref.Fallback || exclude[ref.ID] {
-			continue
-		}
-		up := reg.Get(ref.ID)
-		if up == nil {
-			continue
-		}
-		if !passesGates(up, in) {
-			continue
-		}
-		out = append(out, up)
-	}
-	return out
-}
-
 func passesGates(up *upstream.Upstream, in GateInput) bool {
 	cfg := up.Cfg
 
