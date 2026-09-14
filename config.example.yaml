@@ -9,24 +9,31 @@ server:
 public_models:
   - name: "gpt-router-large"
     upstreams:
-      - id: qwen-flash
+      # All five of these route to the same provider, api.kiosapi.com,
+      # which together should carry ~60-70% of total token volume. Kept as
+      # five separate upstream entries (one per model) rather than one
+      # entry, because Stage 1 gating and TPM budgeting are per-model.
+      - id: qwen3.8-flash
+        weight: 0.14
+      - id: deepseek-v4-flash
+        weight: 0.14
+      - id: dots-3-note-preview
         weight: 0.13
-      - id: deepseek-flash
+      - id: glm-5.3
         weight: 0.13
-      - id: dots-note
-        weight: 0.12
-      - id: glm
-        weight: 0.12
       - id: kilo-auto
-        weight: 0.10
+        weight: 0.11
       - id: selfhost-pool
-        weight: 0.40
+        weight: 0.35
         fallback: true
 
 upstreams:
-  - id: qwen-flash
-    base_url: "https://api.example-qwen.com/v1"
-    api_key_env: "QWEN_KEY"
+  # kiosapi.com-backed models. All share the same base_url and API key —
+  # export KIOSAPI_KEY with the key once you have it; nothing else in this
+  # file needs to change.
+  - id: qwen3.8-flash
+    base_url: "https://api.kiosapi.com/v1"
+    api_key_env: "KIOSAPI_KEY"
     model: "qwen3.8-flash"
     context_window: 128000
     max_output: 8192
@@ -37,10 +44,10 @@ upstreams:
     quirks:
       strip: [logit_bias, seed]
 
-  - id: deepseek-flash
-    base_url: "https://api.example-deepseek.com/v1"
-    api_key_env: "DEEPSEEK_KEY"
-    model: "deepseek-flash"
+  - id: deepseek-v4-flash
+    base_url: "https://api.kiosapi.com/v1"
+    api_key_env: "KIOSAPI_KEY"
+    model: "deepseek-v4-flash"
     context_window: 128000
     max_output: 8192
     modalities: [text]
@@ -50,10 +57,10 @@ upstreams:
     quirks:
       strip: [logit_bias, seed]
 
-  - id: dots-note
-    base_url: "https://api.example-dots.com/v1"
-    api_key_env: "DOTS_KEY"
-    model: "dots.note"
+  - id: dots-3-note-preview
+    base_url: "https://api.kiosapi.com/v1"
+    api_key_env: "KIOSAPI_KEY"
+    model: "dots-3-note-preview"
     context_window: 32000
     max_output: 4096
     modalities: [text]
@@ -66,10 +73,10 @@ upstreams:
       no_top_p: true
       max_completion_tokens: true
 
-  - id: glm
-    base_url: "https://api.example-glm.com/v1"
-    api_key_env: "GLM_KEY"
-    model: "glm-4-flash"
+  - id: glm-5.3
+    base_url: "https://api.kiosapi.com/v1"
+    api_key_env: "KIOSAPI_KEY"
+    model: "glm-5.3"
     context_window: 128000
     max_output: 8192
     modalities: [text, image]
@@ -80,8 +87,8 @@ upstreams:
       strip: [seed]
 
   - id: kilo-auto
-    base_url: "https://api.example-kilo.com/v1"
-    api_key_env: "KILO_KEY"
+    base_url: "https://api.kiosapi.com/v1"
+    api_key_env: "KIOSAPI_KEY"
     model: "kilo-auto"
     context_window: 64000
     max_output: 4096
