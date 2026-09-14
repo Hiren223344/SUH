@@ -3,6 +3,8 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
+	"net/url"
 	"os"
 	"time"
 
@@ -114,6 +116,27 @@ func (u *Upstream) APIKey() string {
 	return os.Getenv(u.APIKeyEnv)
 }
 
+// WarnMissingAPIKeys logs (at Warn level) every upstream whose api_key_env
+// is set but currently resolves to an empty value. This is not a Validate
+// failure — the env var may simply not be injected yet at config-parse
+// time in some deployment orderings, and failing hard here would prevent
+// an otherwise-valid config from loading (or, on hot reload, would discard
+// it and keep serving the stale previous config). It is almost always a
+// deployment mistake worth surfacing loudly, though: a genuinely keyless
+// upstream (e.g. a self-hosted model) simply leaves api_key_env unset
+// rather than pointing it at an empty variable.
+func (c *Config) WarnMissingAPIKeys(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	for i := range c.Upstreams {
+		u := &c.Upstreams[i]
+		if u.APIKeyEnv != "" && u.APIKey() == "" {
+			logger.Warn("upstream api_key_env is set but resolves to an empty value", "upstream", u.ID, "api_key_env", u.APIKeyEnv)
+		}
+	}
+}
+
 // Load reads and validates a config file from disk.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -175,6 +198,9 @@ func (c *Config) Validate() error {
 		if u.BaseURL == "" {
 			return fmt.Errorf("upstream %q: base_url is required", u.ID)
 		}
+		if parsed, err := url.Parse(u.BaseURL); err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return fmt.Errorf("upstream %q: base_url %q is not a valid absolute URL", u.ID, u.BaseURL)
+		}
 		if u.Model == "" {
 			return fmt.Errorf("upstream %q: model is required", u.ID)
 		}
@@ -183,6 +209,9 @@ func (c *Config) Validate() error {
 		}
 		if u.MaxOutput <= 0 {
 			return fmt.Errorf("upstream %q: max_output must be > 0", u.ID)
+		}
+		if u.MaxOutput > u.ContextWindow {
+			return fmt.Errorf("upstream %q: max_output (%d) must not exceed context_window (%d)", u.ID, u.MaxOutput, u.ContextWindow)
 		}
 		if len(u.Modalities) == 0 {
 			return fmt.Errorf("upstream %q: modalities must not be empty", u.ID)
