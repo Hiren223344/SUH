@@ -246,14 +246,16 @@ from the spec's snippet:
   `max_completion_tokens: true` renames `max_tokens` →
   `max_completion_tokens` (for reasoning-style models); `stop_as_string:
   true` collapses a single-element `stop` array to a bare string.
-- `public_models[]` — `gpt-router-large` fans a client's request out across
-  a pool of interchangeable backends. `gpt-6-astra` and `claude-fable-5-1`
-  are the single-backend pattern instead: one dedicated upstream carrying
-  the large majority of the weight, plus the shared `selfhost-pool` as a
-  true last-resort fallback (every public model must designate at least
-  one, per `Config.Validate`). Whichever public name a client requests is
-  the only thing they ever see — in `.model` on the response, in every
-  streamed chunk, in `/v1/models`, and in every error body — regardless of
+- `public_models[]` — each entry is just a client-facing name mapped to a
+  weighted pool of real `upstreams[]` entries; nothing requires the pool to
+  be unique per public model. `gpt-router-large`, `gpt-6-astra`, and
+  `claude-fable-5-1` all fan out across the identical five kiosapi.com
+  models + `selfhost-pool` at the same weights — three names for the same
+  backend pool, not three different backends. Every public model must
+  designate at least one `fallback: true` upstream, per `Config.Validate`.
+  Whichever public name a client requests is the only thing they ever see —
+  in `.model` on the response, in every streamed chunk, in `/v1/models`,
+  and in every error body — regardless of
   which upstream actually served it; see "Identity opacity" above.
 
 Weight changes, upstream additions/removals, and quirk changes all take
