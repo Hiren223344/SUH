@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -242,6 +243,67 @@ func TestStreaming_HappyPath(t *testing.T) {
 	require.NotContains(t, body, "backend-s")
 	require.Contains(t, body, `"model":"M"`)
 	require.Contains(t, body, "data: [DONE]")
+}
+
+// fakeSyncer captures every RecordLocalDelivery call so concurrency tests
+// can verify each request's reported delivery is its own, not inflated by
+// racing against other concurrent requests to the same upstream.
+type fakeSyncer struct {
+	mu     sync.Mutex
+	tokens []float64
+}
+
+func (f *fakeSyncer) RecordLocalDelivery(model, upstreamID string, tokens float64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tokens = append(f.tokens, tokens)
+}
+
+// TestConcurrentRequests_DeliveredTokensNotDoubleCounted guards against a
+// regression where "tokens delivered by this request" was computed by
+// diffing the upstream's shared TokensSent sliding window before/after
+// dispatch. That approach races: concurrent requests to the same upstream
+// can observe each other's deliveries in the diff, inflating (or otherwise
+// corrupting) the amount credited to router.ApplyDelivery and the Redis
+// sync feed. serveNonStream/serveStream now report each request's own
+// delivered-token count directly, computed from that response's own usage
+// object, so this must hold under real concurrency.
+func TestConcurrentRequests_DeliveredTokensNotDoubleCounted(t *testing.T) {
+	const tokensPerReq = 7
+	const totalTokens = int(tokensPerReq)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","created":1,"model":"backend-s","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}`))
+	}))
+	defer srv.Close()
+
+	reg, _ := newTestRegistry(t, map[string]string{"s": srv.URL})
+	syncer := &fakeSyncer{}
+	h := &Handlers{Registry: reg, Stats: stats.NewRecorder(), Logger: testLogger(), Syncer: syncer}
+
+	const n = 50
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(chatReq("M", false)))
+			rw := httptest.NewRecorder()
+			h.ChatCompletions(rw, req)
+			require.Equal(t, http.StatusOK, rw.Code)
+		}()
+	}
+	wg.Wait()
+
+	syncer.mu.Lock()
+	defer syncer.mu.Unlock()
+	require.Len(t, syncer.tokens, n, "every request must report exactly one delivery")
+	var sum float64
+	for _, tok := range syncer.tokens {
+		require.Equal(t, float64(totalTokens), tok, "each request must report only its own delivered tokens, never another concurrent request's")
+		sum += tok
+	}
+	require.Equal(t, float64(n*totalTokens), sum)
 }
 
 // TestCancellation_UpstreamContextCancelledPromptly is acceptance test #8:

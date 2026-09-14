@@ -52,18 +52,22 @@ func (s *sseReader) Next() (string, error) {
 // against another upstream (return committed=false). After that point, a
 // failure can only be terminated cleanly — a well-formed terminal error
 // chunk plus [DONE] — because the client has already committed to this
-// stream.
-func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstream, clientReq *jsonutil.OrderedMap, publicModel, reqID string, rec *stats.Recorder, logger *slog.Logger) (result stepResult, committed bool) {
+// stream. The third return value is the number of tokens actually
+// delivered to the client (from this stream's own usage chunk, when
+// stream_options.include_usage was requested) — never derived by diffing
+// the upstream's shared TokensSent window, which would race against other
+// concurrent requests to the same upstream.
+func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstream, clientReq *jsonutil.OrderedMap, publicModel, reqID string, rec *stats.Recorder, logger *slog.Logger) (result stepResult, committed bool, delivered int64) {
 	start := time.Now()
 	resp, err := dispatch(ctx, up, clientReq)
 	if err != nil {
 		up.Breaker.RecordResult(false, nil)
 		rec.RecordOutcome(up.Cfg.ID, false)
 		if ctx.Err() != nil {
-			return stepClientGone, false
+			return stepClientGone, false, 0
 		}
 		logger.Warn("upstream dispatch failed", "upstream", up.Cfg.ID, "error", err)
-		return stepRetry, false
+		return stepRetry, false, 0
 	}
 	defer resp.Body.Close()
 
@@ -71,7 +75,7 @@ func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstre
 		up.Breaker.RecordResult(false, nil)
 		rec.RecordOutcome(up.Cfg.ID, false)
 		logger.Warn("upstream returned error status", "upstream", up.Cfg.ID, "status", resp.StatusCode)
-		return stepRetry, false
+		return stepRetry, false, 0
 	}
 
 	sse := newSSEReader(bufio.NewReaderSize(resp.Body, 64*1024))
@@ -82,10 +86,10 @@ func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstre
 		up.Breaker.RecordResult(false, nil)
 		rec.RecordOutcome(up.Cfg.ID, false)
 		if ctx.Err() != nil {
-			return stepClientGone, false
+			return stepClientGone, false, 0
 		}
 		logger.Warn("upstream stream failed before first chunk", "upstream", up.Cfg.ID, "error", err)
-		return stepRetry, false
+		return stepRetry, false, 0
 	}
 	rec.RecordTTFT(up.Cfg.ID, time.Since(start))
 
@@ -141,7 +145,7 @@ func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstre
 		// more we can or should do.
 		up.Breaker.RecordResult(true, func() { up.Debt.Store(0) })
 		rec.RecordOutcome(up.Cfg.ID, true)
-		return stepClientGone, true
+		return stepClientGone, true, 0
 	}
 
 	for {
@@ -166,7 +170,7 @@ func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstre
 			if deliveredTokens > 0 {
 				up.RecordDelivered(deliveredTokens)
 			}
-			return stepSuccess, true // committed: caller must not retry
+			return stepSuccess, true, deliveredTokens // committed: caller must not retry
 		}
 		if payload == "[DONE]" {
 			writeEvent(payload)
@@ -180,7 +184,7 @@ func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstre
 			if deliveredTokens > 0 {
 				up.RecordDelivered(deliveredTokens)
 			}
-			return stepClientGone, true
+			return stepClientGone, true, deliveredTokens
 		}
 	}
 
@@ -189,7 +193,7 @@ func serveStream(ctx context.Context, w http.ResponseWriter, up *upstream.Upstre
 	if deliveredTokens > 0 {
 		up.RecordDelivered(deliveredTokens)
 	}
-	return stepSuccess, true
+	return stepSuccess, true, deliveredTokens
 }
 
 func isCleanEOF(err error) bool {

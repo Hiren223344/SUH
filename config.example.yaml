@@ -27,6 +27,30 @@ public_models:
         weight: 0.35
         fallback: true
 
+  # Single-backend public models: one dedicated kiosapi.com-backed upstream
+  # each, with the same shared selfhost-pool as fallback (required: every
+  # public model must designate at least one fallback upstream, and it is
+  # already the only upstream capable of every modality/tool/context
+  # combination — see its definition below). Unlike gpt-router-large, these
+  # aren't fanning out across a pool of interchangeable backends, so the
+  # dedicated upstream carries the large majority of the weight and
+  # selfhost-pool is a true last-resort, not steady-state overflow capacity.
+  - name: "gpt-6-astra"
+    upstreams:
+      - id: gpt-6-astra
+        weight: 0.9
+      - id: selfhost-pool
+        weight: 0.1
+        fallback: true
+
+  - name: "claude-fable-5-1"
+    upstreams:
+      - id: claude-fable-5-1
+        weight: 0.9
+      - id: selfhost-pool
+        weight: 0.1
+        fallback: true
+
 upstreams:
   # kiosapi.com-backed models. All share the same base_url and API key —
   # export KIOSAPI_KEY with the key once you have it; nothing else in this
@@ -98,6 +122,32 @@ upstreams:
     tpm_limit: 2000000
     quirks:
       strip: [logit_bias]
+
+  - id: gpt-6-astra
+    base_url: "https://api.kiosapi.com/v1"
+    api_key_env: "KIOSAPI_KEY"
+    model: "gpt-6-astra"
+    context_window: 256000
+    max_output: 16384
+    modalities: [text, image]
+    supports_tools: true
+    supports_json_schema: true
+    tpm_limit: 3000000
+    quirks:
+      strip: [logit_bias, seed]
+
+  - id: claude-fable-5-1
+    base_url: "https://api.kiosapi.com/v1"
+    api_key_env: "KIOSAPI_KEY"
+    model: "claude-fable-5-1"
+    context_window: 200000
+    max_output: 16384
+    modalities: [text, image]
+    supports_tools: true
+    supports_json_schema: true
+    tpm_limit: 3000000
+    quirks:
+      strip: [logit_bias, seed]
 
   # The universal fallback: must satisfy the widest capability set
   # (multimodal, tools, structured output, largest context) since it is
