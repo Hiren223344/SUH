@@ -24,15 +24,15 @@ type contentPart struct {
 // Signals summarizes the routing-relevant facts about a chat completion
 // request, extracted once and passed to gating/estimation/logging.
 type Signals struct {
-	Model            string
-	Stream           bool
-	IncludeUsage     bool
-	HasImage         bool
-	HasAudio         bool
-	HasTools         bool // tools/tool_choice present, or history contains tool_calls/role:tool
-	ResponseFormat   string // "", "json_object", or "json_schema"
-	MaxTokens        int // from max_tokens or max_completion_tokens; 0 if unset
-	Messages         []ChatMessage
+	Model          string
+	Stream         bool
+	IncludeUsage   bool
+	HasImage       bool
+	HasAudio       bool
+	HasTools       bool   // tools/tool_choice present, or history contains tool_calls/role:tool
+	ResponseFormat string // "", "json_object", or "json_schema"
+	MaxTokens      int    // from max_tokens or max_completion_tokens; 0 if unset
+	Messages       []ChatMessage
 }
 
 // Messages unmarshals the request's "messages" array.

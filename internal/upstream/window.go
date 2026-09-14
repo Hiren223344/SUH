@@ -13,9 +13,9 @@ const slidingWindowBuckets = 60
 // SlidingWindow accumulates token counts into per-minute atomic buckets and
 // reports a rolling sum. It never allocates or locks on the hot path.
 type SlidingWindow struct {
-	buckets    [slidingWindowBuckets]atomic.Int64
-	bucketMin  [slidingWindowBuckets]atomic.Int64 // unix-minute stamp owning each bucket slot
-	nowFunc    func() time.Time
+	buckets   [slidingWindowBuckets]atomic.Int64
+	bucketMin [slidingWindowBuckets]atomic.Int64 // unix-minute stamp owning each bucket slot
+	nowFunc   func() time.Time
 }
 
 func NewSlidingWindow() *SlidingWindow {

@@ -16,10 +16,10 @@ import (
 // through. Anything else (provider-specific cost/billing/cache metadata)
 // is dropped because it can fingerprint the backend.
 var usageAllowlist = map[string]bool{
-	"prompt_tokens":            true,
-	"completion_tokens":        true,
-	"total_tokens":             true,
-	"prompt_tokens_details":    true,
+	"prompt_tokens":             true,
+	"completion_tokens":         true,
+	"total_tokens":              true,
+	"prompt_tokens_details":     true,
 	"completion_tokens_details": true,
 }
 

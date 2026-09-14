@@ -48,30 +48,30 @@ type PublicModelUpstream struct {
 }
 
 type PublicModel struct {
-	Name      string                 `yaml:"name"`
-	Upstreams []PublicModelUpstream  `yaml:"upstreams"`
+	Name      string                `yaml:"name"`
+	Upstreams []PublicModelUpstream `yaml:"upstreams"`
 }
 
 type Quirks struct {
-	Strip                []string `yaml:"strip"`
-	NoTemperature        bool     `yaml:"no_temperature"`
-	NoTopP               bool     `yaml:"no_top_p"`
-	MaxCompletionTokens  bool     `yaml:"max_completion_tokens"`
-	StopAsString         bool     `yaml:"stop_as_string"`
+	Strip               []string `yaml:"strip"`
+	NoTemperature       bool     `yaml:"no_temperature"`
+	NoTopP              bool     `yaml:"no_top_p"`
+	MaxCompletionTokens bool     `yaml:"max_completion_tokens"`
+	StopAsString        bool     `yaml:"stop_as_string"`
 }
 
 type Upstream struct {
-	ID                  string   `yaml:"id"`
-	BaseURL             string   `yaml:"base_url"`
-	APIKeyEnv           string   `yaml:"api_key_env"`
-	Model               string   `yaml:"model"`
-	ContextWindow       int      `yaml:"context_window"`
-	MaxOutput           int      `yaml:"max_output"`
-	Modalities          []string `yaml:"modalities"`
-	SupportsTools       bool     `yaml:"supports_tools"`
-	SupportsJSONSchema  bool     `yaml:"supports_json_schema"`
-	TPMLimit            int64    `yaml:"tpm_limit"`
-	Quirks              Quirks   `yaml:"quirks"`
+	ID                 string   `yaml:"id"`
+	BaseURL            string   `yaml:"base_url"`
+	APIKeyEnv          string   `yaml:"api_key_env"`
+	Model              string   `yaml:"model"`
+	ContextWindow      int      `yaml:"context_window"`
+	MaxOutput          int      `yaml:"max_output"`
+	Modalities         []string `yaml:"modalities"`
+	SupportsTools      bool     `yaml:"supports_tools"`
+	SupportsJSONSchema bool     `yaml:"supports_json_schema"`
+	TPMLimit           int64    `yaml:"tpm_limit"`
+	Quirks             Quirks   `yaml:"quirks"`
 }
 
 type RedisConfig struct {
@@ -80,10 +80,10 @@ type RedisConfig struct {
 }
 
 type Config struct {
-	Server       ServerConfig   `yaml:"server"`
-	PublicModels []PublicModel  `yaml:"public_models"`
-	Upstreams    []Upstream     `yaml:"upstreams"`
-	Redis        RedisConfig    `yaml:"redis"`
+	Server       ServerConfig  `yaml:"server"`
+	PublicModels []PublicModel `yaml:"public_models"`
+	Upstreams    []Upstream    `yaml:"upstreams"`
+	Redis        RedisConfig   `yaml:"redis"`
 }
 
 // UpstreamByID returns the upstream definition for id, if present.

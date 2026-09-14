@@ -18,6 +18,7 @@ import (
 
 	"router/internal/config"
 	"router/internal/proxy"
+	"router/internal/redisync"
 	"router/internal/router"
 	"router/internal/stats"
 	"router/internal/upstream"
@@ -39,6 +40,18 @@ func main() {
 	rec := stats.NewRecorder()
 	h := &proxy.Handlers{Registry: reg, Stats: rec, Logger: logger}
 
+	var syncer *redisync.Syncer
+	if cfg0 := mgr.Get(); cfg0.Redis.Enabled {
+		store, err := redisync.NewRedisStore(cfg0.Redis.URL)
+		if err != nil {
+			logger.Error("redis sync disabled: failed to configure client", "error", err)
+		} else {
+			syncer = redisync.NewSyncer(store, 5*time.Second, logger)
+			h.Syncer = syncer
+			logger.Info("redis cross-instance sync enabled")
+		}
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Post("/v1/chat/completions", h.ChatCompletions)
@@ -57,6 +70,9 @@ func main() {
 	defer stop()
 
 	go mgr.Watch(ctx)
+	if syncer != nil {
+		go syncer.Run(ctx, reg)
+	}
 
 	go func() {
 		logger.Info("router listening", "addr", cfg.Server.Listen)

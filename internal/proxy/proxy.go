@@ -19,11 +19,20 @@ import (
 
 const maxClientBodyBytes = 32 << 20
 
+// deliverySyncer is implemented by redisync.Syncer. Kept as a narrow local
+// interface so this package doesn't need to import redisync (and so the
+// field can simply be left nil when Redis is disabled — the default,
+// fully-correct single-instance path).
+type deliverySyncer interface {
+	RecordLocalDelivery(model, upstreamID string, tokens float64)
+}
+
 // Handlers bundles the dependencies every HTTP handler in this package needs.
 type Handlers struct {
 	Registry *router.Registry
 	Stats    *stats.Recorder
 	Logger   *slog.Logger
+	Syncer   deliverySyncer // optional; nil when redis.enabled is false
 }
 
 // ChatCompletions serves POST /v1/chat/completions.
@@ -100,6 +109,9 @@ func (h *Handlers) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 			if committed {
 				delivered := selected.TokensSent.Sum() - before
 				router.ApplyDelivery(pm, candidates, selected, delivered)
+				if h.Syncer != nil {
+					h.Syncer.RecordLocalDelivery(publicModel, selected.Cfg.ID, float64(delivered))
+				}
 				return
 			}
 			if result == stepClientGone {
@@ -115,6 +127,9 @@ func (h *Handlers) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		case stepSuccess:
 			delivered := selected.TokensSent.Sum() - before
 			router.ApplyDelivery(pm, candidates, selected, delivered)
+			if h.Syncer != nil {
+				h.Syncer.RecordLocalDelivery(publicModel, selected.Cfg.ID, float64(delivered))
+			}
 			return
 		case stepClientGone:
 			return

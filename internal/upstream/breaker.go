@@ -37,9 +37,9 @@ type Breaker struct {
 	cooldown                 time.Duration
 	nowFunc                  func() time.Time
 
-	state           BreakerState
-	consecutiveFail int
-	openedAt        time.Time
+	state            BreakerState
+	consecutiveFail  int
+	openedAt         time.Time
 	halfOpenInFlight bool
 
 	events []event // trailing window of pass/fail for rate calc
