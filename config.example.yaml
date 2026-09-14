@@ -1,0 +1,112 @@
+server:
+  listen: ":8080"
+  max_attempts: 3
+  request_budget: 90s
+  # Bearer token required to read /internal/stats. Leave unset to disable
+  # the endpoint entirely (it refuses all requests rather than defaulting open).
+  stats_auth_token: "change-me"
+
+public_models:
+  - name: "gpt-router-large"
+    upstreams:
+      - id: qwen-flash
+        weight: 0.13
+      - id: deepseek-flash
+        weight: 0.13
+      - id: dots-note
+        weight: 0.12
+      - id: glm
+        weight: 0.12
+      - id: kilo-auto
+        weight: 0.10
+      - id: selfhost-pool
+        weight: 0.40
+        fallback: true
+
+upstreams:
+  - id: qwen-flash
+    base_url: "https://api.example-qwen.com/v1"
+    api_key_env: "QWEN_KEY"
+    model: "qwen3.8-flash"
+    context_window: 128000
+    max_output: 8192
+    modalities: [text]
+    supports_tools: true
+    supports_json_schema: true
+    tpm_limit: 4000000
+    quirks:
+      strip: [logit_bias, seed]
+
+  - id: deepseek-flash
+    base_url: "https://api.example-deepseek.com/v1"
+    api_key_env: "DEEPSEEK_KEY"
+    model: "deepseek-flash"
+    context_window: 128000
+    max_output: 8192
+    modalities: [text]
+    supports_tools: true
+    supports_json_schema: true
+    tpm_limit: 4000000
+    quirks:
+      strip: [logit_bias, seed]
+
+  - id: dots-note
+    base_url: "https://api.example-dots.com/v1"
+    api_key_env: "DOTS_KEY"
+    model: "dots.note"
+    context_window: 32000
+    max_output: 4096
+    modalities: [text]
+    supports_tools: false
+    supports_json_schema: false
+    tpm_limit: 3000000
+    quirks:
+      strip: [logit_bias, seed, frequency_penalty, presence_penalty]
+      no_temperature: true
+      no_top_p: true
+      max_completion_tokens: true
+
+  - id: glm
+    base_url: "https://api.example-glm.com/v1"
+    api_key_env: "GLM_KEY"
+    model: "glm-4-flash"
+    context_window: 128000
+    max_output: 8192
+    modalities: [text, image]
+    supports_tools: true
+    supports_json_schema: true
+    tpm_limit: 3000000
+    quirks:
+      strip: [seed]
+
+  - id: kilo-auto
+    base_url: "https://api.example-kilo.com/v1"
+    api_key_env: "KILO_KEY"
+    model: "kilo-auto"
+    context_window: 64000
+    max_output: 4096
+    modalities: [text]
+    supports_tools: true
+    supports_json_schema: false
+    tpm_limit: 2000000
+    quirks:
+      strip: [logit_bias]
+
+  # The universal fallback: must satisfy the widest capability set
+  # (multimodal, tools, structured output, largest context) since it is
+  # the only guaranteed candidate when every other upstream is gated out.
+  - id: selfhost-pool
+    base_url: "http://localhost:8000/v1"
+    api_key_env: ""
+    model: "self-hosted-70b"
+    context_window: 200000
+    max_output: 16384
+    modalities: [text, image, audio]
+    supports_tools: true
+    supports_json_schema: true
+    tpm_limit: 20000000
+    quirks: {}
+
+redis:
+  enabled: false
+  url: ""

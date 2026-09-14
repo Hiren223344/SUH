@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -20,6 +21,9 @@ type Manager struct {
 	cur      atomic.Pointer[Config]
 	lastMod  time.Time
 	logger   *slog.Logger
+
+	mu          sync.Mutex
+	subscribers []func(*Config)
 }
 
 // NewManager loads the config at path once (returning any load error) and
@@ -64,7 +68,24 @@ func (m *Manager) Reload() error {
 	}
 	m.cur.Store(cfg)
 	m.logger.Info("config reloaded", "path", m.path)
+
+	m.mu.Lock()
+	subs := append([]func(*Config){}, m.subscribers...)
+	m.mu.Unlock()
+	for _, fn := range subs {
+		fn(cfg)
+	}
 	return nil
+}
+
+// Subscribe registers fn to be called (with the new config) every time
+// Reload swaps in a successfully validated config. Used by components with
+// their own per-upstream runtime state (e.g. the router's registry) that
+// need to reconcile against config changes without resetting in-flight work.
+func (m *Manager) Subscribe(fn func(*Config)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subscribers = append(m.subscribers, fn)
 }
 
 // Watch polls the config file for changes until ctx is cancelled.
