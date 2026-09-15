@@ -9,23 +9,28 @@ server:
 public_models:
   - name: "gpt-router-large"
     upstreams:
-      # All five of these route to the same provider, api.kiosapi.com,
-      # which together should carry ~60-70% of total token volume. Kept as
+      # All five of these route to the same provider, api.kiosapi.com, and
+      # currently carry 100% of traffic -- selfhost-pool (see its
+      # definition below) is defined but deliberately not referenced here:
+      # its base_url points at the same port the router itself listens on
+      # by default, so it can never actually be reached until that's fixed
+      # (a different port, or a real self-hosted server there). Kept as
       # five separate upstream entries (one per model) rather than one
       # entry, because Stage 1 gating and TPM budgeting are per-model.
+      # glm-5.3 is the fallback: among these five it has the widest
+      # capability set (text+image, tools, json-schema), so it's the last
+      # candidate standing most often when others get gated out.
       - id: qwen3.8-flash
-        weight: 0.14
+        weight: 0.21
       - id: deepseek-v4-flash
-        weight: 0.14
+        weight: 0.21
       - id: dots-3-note-preview
-        weight: 0.13
+        weight: 0.20
       - id: glm-5.3
-        weight: 0.13
-      - id: kilo-auto
-        weight: 0.11
-      - id: selfhost-pool
-        weight: 0.35
+        weight: 0.20
         fallback: true
+      - id: kilo-auto
+        weight: 0.18
 
   # gpt-6-astra and claude-fable-5-1 are additional public-facing names for
   # the exact same real backend pool as gpt-router-large above — NOT
@@ -33,8 +38,8 @@ public_models:
   # model literally named "gpt-6-astra" or "claude-fable-5-1"; those were
   # never real backend identifiers, only the public names a client asks
   # for. Whichever of the three names a client requests, the router fans
-  # it out across the same five kiosapi.com-backed models + selfhost-pool,
-  # at the same weights — the identity-opacity chokepoint (see README)
+  # it out across the same five kiosapi.com-backed models, at the same
+  # weights — the identity-opacity chokepoint (see README)
   # means the client never learns that "gpt-6-astra" and
   # "claude-fable-5-1" resolve to the same underlying pool as
   # "gpt-router-large". If these should eventually target a distinct real
@@ -43,34 +48,30 @@ public_models:
   - name: "gpt-6-astra"
     upstreams:
       - id: qwen3.8-flash
-        weight: 0.14
+        weight: 0.21
       - id: deepseek-v4-flash
-        weight: 0.14
+        weight: 0.21
       - id: dots-3-note-preview
-        weight: 0.13
+        weight: 0.20
       - id: glm-5.3
-        weight: 0.13
-      - id: kilo-auto
-        weight: 0.11
-      - id: selfhost-pool
-        weight: 0.35
+        weight: 0.20
         fallback: true
+      - id: kilo-auto
+        weight: 0.18
 
   - name: "claude-fable-5-1"
     upstreams:
       - id: qwen3.8-flash
-        weight: 0.14
+        weight: 0.21
       - id: deepseek-v4-flash
-        weight: 0.14
+        weight: 0.21
       - id: dots-3-note-preview
-        weight: 0.13
+        weight: 0.20
       - id: glm-5.3
-        weight: 0.13
-      - id: kilo-auto
-        weight: 0.11
-      - id: selfhost-pool
-        weight: 0.35
+        weight: 0.20
         fallback: true
+      - id: kilo-auto
+        weight: 0.18
 
 upstreams:
   # kiosapi.com-backed models. All share the same base_url and API key —
@@ -144,9 +145,13 @@ upstreams:
     quirks:
       strip: [logit_bias]
 
-  # The universal fallback: must satisfy the widest capability set
-  # (multimodal, tools, structured output, largest context) since it is
-  # the only guaranteed candidate when every other upstream is gated out.
+  # Not currently referenced by any public_models[] entry above -- see the
+  # comment on gpt-router-large's upstream list. If you have a real
+  # self-hosted server, point base_url at its actual host:port (NOT the
+  # same port as server.listen -- the router can't be its own upstream)
+  # and add this id back into each public model's upstreams list; its
+  # 200k context window and audio modality make it the only member of the
+  # pool that can serve the largest requests / audio inputs at all.
   - id: selfhost-pool
     base_url: "http://localhost:8000/v1"
     api_key_env: ""
